@@ -2588,12 +2588,12 @@ container-run-ssl: certs container-check-image
 	-$(CONTAINER_RUNTIME) stop $(PROJECT_NAME) 2>/dev/null || true
 	-$(CONTAINER_RUNTIME) rm $(PROJECT_NAME) 2>/dev/null || true
 	$(CONTAINER_RUNTIME) run --name $(PROJECT_NAME) \
-		--user $(shell id -u):$(shell id -g) \
 		--env-file=.env \
 		-e SSL=true \
 		-e CERT_FILE=certs/cert.pem \
 		-e KEY_FILE=certs/key.pem \
 		-v $(PWD)/certs:/app/certs:ro$(if $(filter podman,$(CONTAINER_RUNTIME)),$(COMMA)Z,) \
+		-v mcp_gateway_data:/app/data$(if $(filter podman,$(CONTAINER_RUNTIME)),$(COMMA)Z$(COMMA)U,) \
 		-p 4444:4444 \
 		--restart=always \
 		--memory=$(CONTAINER_MEMORY) --cpus=$(CONTAINER_CPUS) \
