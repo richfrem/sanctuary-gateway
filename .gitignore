@@ -91,7 +91,6 @@ commands_output.md
 command_output.md
 command_output.txt
 command_outputs.md
-.env
 .env.ce
 .ica.env
 ./snakefood.png
@@ -204,7 +203,6 @@ celerybeat-schedule
 *.sage.py
 
 # Environments
-.env
 .venv
 env/
 venv/
@@ -269,3 +267,4 @@ plugins_rust/Cargo.lock
 
 # CDN vendor assets (downloaded during container build)
 mcpgateway/static/vendor/
+.env
