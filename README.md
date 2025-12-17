@@ -2,25 +2,27 @@
 
 > Model Context Protocol gateway & proxy - unify REST, MCP, and A2A with federation, virtual servers, retries, security, and an optional admin UI.
 
+> **Note:** This is a fork of [IBM/mcp-context-forge](https://github.com/IBM/mcp-context-forge).
+
 ![](docs/docs/images/contextforge-banner.png)
 
 <!-- === CI / Security / Build Badges === -->
-[![Build Python Package](https://github.com/IBM/mcp-context-forge/actions/workflows/python-package.yml/badge.svg)](https://github.com/IBM/mcp-context-forge/actions/workflows/python-package.yml)&nbsp;
-[![CodeQL](https://github.com/IBM/mcp-context-forge/actions/workflows/codeql.yml/badge.svg)](https://github.com/IBM/mcp-context-forge/actions/workflows/codeql.yml)&nbsp;
-[![Bandit Security](https://github.com/IBM/mcp-context-forge/actions/workflows/bandit.yml/badge.svg)](https://github.com/IBM/mcp-context-forge/actions/workflows/bandit.yml)&nbsp;
-[![Dependency Review](https://github.com/IBM/mcp-context-forge/actions/workflows/dependency-review.yml/badge.svg)](https://github.com/IBM/mcp-context-forge/actions/workflows/dependency-review.yml)&nbsp;
-[![Tests & Coverage](https://github.com/IBM/mcp-context-forge/actions/workflows/pytest.yml/badge.svg)](https://github.com/IBM/mcp-context-forge/actions/workflows/pytest.yml)&nbsp;
-[![Lint & Static Analysis](https://github.com/IBM/mcp-context-forge/actions/workflows/lint.yml/badge.svg)](https://github.com/IBM/mcp-context-forge/actions/workflows/lint.yml)
+[![Build Python Package](https://github.com/richfrem/sanctuary-gateway/actions/workflows/python-package.yml/badge.svg)](https://github.com/richfrem/sanctuary-gateway/actions/workflows/python-package.yml)&nbsp;
+[![CodeQL](https://github.com/richfrem/sanctuary-gateway/actions/workflows/codeql.yml/badge.svg)](https://github.com/richfrem/sanctuary-gateway/actions/workflows/codeql.yml)&nbsp;
+[![Bandit Security](https://github.com/richfrem/sanctuary-gateway/actions/workflows/bandit.yml/badge.svg)](https://github.com/richfrem/sanctuary-gateway/actions/workflows/bandit.yml)&nbsp;
+[![Dependency Review](https://github.com/richfrem/sanctuary-gateway/actions/workflows/dependency-review.yml/badge.svg)](https://github.com/richfrem/sanctuary-gateway/actions/workflows/dependency-review.yml)&nbsp;
+[![Tests & Coverage](https://github.com/richfrem/sanctuary-gateway/actions/workflows/pytest.yml/badge.svg)](https://github.com/richfrem/sanctuary-gateway/actions/workflows/pytest.yml)&nbsp;
+[![Lint & Static Analysis](https://github.com/richfrem/sanctuary-gateway/actions/workflows/lint.yml/badge.svg)](https://github.com/richfrem/sanctuary-gateway/actions/workflows/lint.yml)
 
 <!-- === Container Build & Deploy === -->
-[![Secure Docker Build](https://github.com/IBM/mcp-context-forge/actions/workflows/docker-image.yml/badge.svg)](https://github.com/IBM/mcp-context-forge/actions/workflows/docker-image.yml)&nbsp;
-[![Deploy to IBM Code Engine](https://github.com/IBM/mcp-context-forge/actions/workflows/ibm-cloud-code-engine.yml/badge.svg)](https://github.com/IBM/mcp-context-forge/actions/workflows/ibm-cloud-code-engine.yml)
+[![Secure Docker Build](https://github.com/richfrem/sanctuary-gateway/actions/workflows/docker-image.yml/badge.svg)](https://github.com/richfrem/sanctuary-gateway/actions/workflows/docker-image.yml)&nbsp;
+[![Deploy to IBM Code Engine](https://github.com/richfrem/sanctuary-gateway/actions/workflows/ibm-cloud-code-engine.yml/badge.svg)](https://github.com/richfrem/sanctuary-gateway/actions/workflows/ibm-cloud-code-engine.yml)
 
 <!-- === Package / Container === -->
 [![Async](https://img.shields.io/badge/async-await-green.svg)](https://docs.python.org/3/library/asyncio.html)
-[![License](https://img.shields.io/github/license/ibm/mcp-context-forge)](LICENSE)&nbsp;
+[![License](https://img.shields.io/github/license/richfrem/sanctuary-gateway)](LICENSE)&nbsp;
 [![PyPI](https://img.shields.io/pypi/v/mcp-contextforge-gateway)](https://pypi.org/project/mcp-contextforge-gateway/)&nbsp;
-[![Docker Image](https://img.shields.io/badge/docker-ghcr.io%2Fibm%2Fmcp--context--forge-blue)](https://github.com/ibm/mcp-context-forge/pkgs/container/mcp-context-forge)&nbsp;
+[![Docker Image](https://img.shields.io/badge/docker-ghcr.io%2Frichfrem%2Fsanctuary--gateway-blue)](https://github.com/richfrem/sanctuary-gateway/pkgs/container/sanctuary-gateway)&nbsp;
 
 
 ContextForge MCP Gateway is a feature-rich gateway, proxy and MCP Registry that federates MCP and REST services - unifying discovery, auth, rate-limiting, observability, virtual servers, multi-transport protocols, and an optional Admin UI into one clean endpoint for your AI clients. It runs as a fully compliant MCP server, deployable via PyPI or Docker, and scales to multi-cluster environments on Kubernetes with Redis-backed federation and caching.
