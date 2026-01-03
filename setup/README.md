@@ -53,3 +53,31 @@ If you receive a 503 error when `verify_hello_world_rpc.py` runs, it means the G
 *   **Cause**: On WSL2/Podman, containers on different networks cannot communicate due to `slirp4netns` limitations.
 *   **Fix**: Ensure the Gateway is launched with `--network=sanctuary_network` (or whatever network the servers are on).
     *   In `Makefile`, update the `podman-run-ssl` (or `container-run-ssl`) target to include `--network=sanctuary_network`.
+
+## Prerequisites (macOS)
+
+*   **Podman**: Install via Homebrew (`brew install podman`). Initialize with `podman machine init && podman machine start`.
+*   **Python 3**: Ships with macOS or install via Homebrew.
+*   **Make**: Comes with Xcode Command Line Tools (`xcode-select --install`).
+*   **Environment Variables**: Same as WSL. Token syncs to `~/.zshrc` automatically.
+
+## Verification Scripts
+
+After setup, you can verify the installation:
+
+*   `python3 setup/verify_hello_world_rpc.py` - Tests gateway registration and tool invocation via JSON-RPC.
+*   `scripts/verify_jwt_auth.py` - Validates JWT token authentication.
+
+## Cross-Platform Considerations
+
+| Issue | macOS | WSL2/Windows |
+|-------|-------|--------------|
+| Network Mode | `podman network connect` works | May fail with `slirp4netns` error |
+| Token Storage | `~/.zshrc` | Windows User Env Vars + WSLENV bridge |
+| Quote Handling | Standard | May cause double-quoting (fixed in `env_utils.py`) |
+
+## Recent Fixes
+
+*   **`--network=sanctuary_network`**: Added to `container-run-ssl` Makefile target for cross-platform compatibility.
+*   **Quote stripping**: `env_utils.py` now strips existing quotes before writing to prevent `TOKEN=""value""` issues on Windows.
+*   **Non-fatal network connect**: `recreate_gateway.py` treats `podman network connect` failures as warnings, not errors.
