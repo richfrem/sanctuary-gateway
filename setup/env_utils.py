@@ -45,6 +45,12 @@ def update_env_file(key, value, file_path=".env"):
         value: Value to set
         file_path: Path to .env file (default: ".env")
     """
+    # Strip any existing quotes from value to prevent double-quoting
+    value = str(value).strip()
+    if (value.startswith('"') and value.endswith('"')) or \
+       (value.startswith("'") and value.endswith("'")):
+        value = value[1:-1]
+    
     if not os.path.exists(file_path):
         with open(file_path, "w") as f:
             f.write(f'{key}="{value}"\n')
@@ -68,3 +74,4 @@ def update_env_file(key, value, file_path=".env"):
 
     with open(file_path, "w") as f:
         f.writelines(lines)
+
