@@ -380,20 +380,23 @@ def main():
 
     # PHASE 6: IMAGE BUILD (Gateway)
     print("\n--- Phase 6: Container Images ---")
-    if not check_podman_resource("image", "localhost/mcp_gateway/mcp_gateway:latest") or args.force:
+    # The image name in the Makefile is mcpgateway/mcpgateway
+    GATEWAY_IMAGE = "localhost/mcpgateway/mcpgateway:latest"
+    if not check_podman_resource("image", GATEWAY_IMAGE) or args.force:
         run_cmd("make podman-build", "Building Gateway Image", args.dry_run)
     else:
-        print("✅ Gateway image exists.")
+        print(f"✅ Gateway image '{GATEWAY_IMAGE}' exists.")
 
     # Build Hello World Image
     helloworld_dir = "tests/assets/helloworld"
+    HELLOWORLD_IMAGE = "localhost/helloworld_mcp:latest"
     if not os.path.exists(helloworld_dir):
         print(f"⚠️  Hello World assets not found at {helloworld_dir}, skipping Hello World build.")
     else:
-        if not check_podman_resource("image", "localhost/helloworld_mcp:latest") or args.force:
-             run_cmd(f"podman build -t localhost/helloworld_mcp:latest {helloworld_dir}", "Building Hello World Image", args.dry_run)
+        if not check_podman_resource("image", HELLOWORLD_IMAGE) or args.force:
+             run_cmd(f"podman build -t {HELLOWORLD_IMAGE} {helloworld_dir}", "Building Hello World Image", args.dry_run)
         else:
-             print("✅ Hello World image exists.")
+             print(f"✅ Hello World image '{HELLOWORLD_IMAGE}' exists.")
 
     # PHASE 6.5: NETWORK setup
     print("\n--- Phase 6.5: Network Setup ---")
@@ -407,8 +410,10 @@ def main():
     print("\n--- Phase 7: Container Deployment ---")
 
     # Run Hello World Server (Background)
-    if check_podman_resource("image", "localhost/helloworld_mcp:latest"):
-        run_cmd(f"podman run -d --name helloworld_mcp --network {NETWORK_NAME} -p 8005:8005 localhost/helloworld_mcp:latest", "Starting Hello World Server", args.dry_run)
+    if check_podman_resource("image", HELLOWORLD_IMAGE):
+        run_cmd(f"podman run -d --name helloworld_mcp --network {NETWORK_NAME} -p 8005:8005 {HELLOWORLD_IMAGE}", "Starting Hello World Server", args.dry_run)
+    else:
+        print("⚠️  Skipping Hello World Server: Image not found.")
 
     # Run Gateway (attached to network)
     # Note: make podman-run-ssl might not support custom networks easily without editing Makefile.
