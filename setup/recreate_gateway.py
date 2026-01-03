@@ -381,11 +381,13 @@ def main():
     # PHASE 6: IMAGE BUILD (Gateway)
     print("\n--- Phase 6: Container Images ---")
     # The image name in the Makefile is mcpgateway/mcpgateway
+    # Podman prepends 'localhost/' to locally built images
     GATEWAY_IMAGE = "localhost/mcpgateway/mcpgateway:latest"
-    if not check_podman_resource("image", GATEWAY_IMAGE) or args.force:
+    if not check_podman_resource("image", GATEWAY_IMAGE) and not check_podman_resource("image", "mcpgateway/mcpgateway:latest") or args.force:
         run_cmd("make podman-build", "Building Gateway Image", args.dry_run)
     else:
-        print(f"✅ Gateway image '{GATEWAY_IMAGE}' exists.")
+        print(f"✅ Gateway image exists.")
+
 
     # Build Hello World Image
     helloworld_dir = "tests/assets/helloworld"
@@ -416,22 +418,17 @@ def main():
         print("⚠️  Skipping Hello World Server: Image not found.")
 
     # Run Gateway (attached to network)
-    # Note: make podman-run-ssl might not support custom networks easily without editing Makefile.
-    # We will override the command manually here to ensure network attachment.
-    # Extracting the command logic from Makefile would be ideal, but for now let's try appending the network arg if we execute raw podman run
-    # OR, relies on Makefile accepting EXTRA_ARGS or similar. 
-    # Let's Modify the Makefile call or replicate the run command.
-    # Replicating run command is risky if Makefile changes. 
-    # Best approach: Use podman network connect after start? No, needs to be at start for some things.
-    # Let's assume we can use `podman network connect` immediately after start.
-    
     run_cmd("make podman-run-ssl", "Launching Gateway Container", args.dry_run)
     
-    # Attach Gateway to network
+    # Attach containers to network
     if not args.dry_run:
-        # Give it a second to exist
+        # Give it a moment to exist
         time.sleep(2)
+        # Ensure helloworld is on network first (Gateway needs to reach it)
+        run_cmd(f"podman network connect {NETWORK_NAME} helloworld_mcp", "Connecting Hello World to 'sanctuary_network'", args.dry_run)
+        # Connect Gateway
         run_cmd(f"podman network connect {NETWORK_NAME} {CONTAINER_NAME}", "Connecting Gateway to 'sanctuary_network'", args.dry_run)
+
 
     # PHASE 7.1: READINESS CHECK
     if not args.dry_run:
