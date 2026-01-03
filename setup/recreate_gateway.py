@@ -420,14 +420,34 @@ def main():
     # Run Gateway (attached to network)
     run_cmd("make podman-run-ssl", "Launching Gateway Container", args.dry_run)
     
-    # Attach containers to network
+    # Attach containers to network (optional - may fail on slirp4netns/WSL2)
     if not args.dry_run:
         # Give it a moment to exist
         time.sleep(2)
-        # Ensure helloworld is on network first (Gateway needs to reach it)
-        run_cmd(f"podman network connect {NETWORK_NAME} helloworld_mcp", "Connecting Hello World to 'sanctuary_network'", args.dry_run)
-        # Connect Gateway
-        run_cmd(f"podman network connect {NETWORK_NAME} {CONTAINER_NAME}", "Connecting Gateway to 'sanctuary_network'", args.dry_run)
+        # Try to connect containers to network. This may fail on some platforms
+        # (e.g., WSL2 with slirp4netns) but is not critical if containers were
+        # started with --network flag directly.
+        try:
+            result = subprocess.run(f"podman network connect {NETWORK_NAME} helloworld_mcp", shell=True, capture_output=True, text=True)
+            if result.returncode == 0:
+                print(f"✅ Connected helloworld_mcp to '{NETWORK_NAME}'")
+            elif "already connected" in result.stderr.lower():
+                print(f"✅ helloworld_mcp already connected to '{NETWORK_NAME}'")
+            else:
+                print(f"⚠️  Could not connect helloworld_mcp to network (non-fatal): {result.stderr.strip()}")
+        except Exception as e:
+            print(f"⚠️  Network connect not supported on this platform: {e}")
+        
+        try:
+            result = subprocess.run(f"podman network connect {NETWORK_NAME} {CONTAINER_NAME}", shell=True, capture_output=True, text=True)
+            if result.returncode == 0:
+                print(f"✅ Connected {CONTAINER_NAME} to '{NETWORK_NAME}'")
+            elif "already connected" in result.stderr.lower():
+                print(f"✅ {CONTAINER_NAME} already connected to '{NETWORK_NAME}'")
+            else:
+                print(f"⚠️  Could not connect {CONTAINER_NAME} to network (non-fatal): {result.stderr.strip()}")
+        except Exception as e:
+            print(f"⚠️  Network connect not supported on this platform: {e}")
 
 
     # PHASE 7.1: READINESS CHECK
