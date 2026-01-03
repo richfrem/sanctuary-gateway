@@ -8,7 +8,7 @@ PURPOSE:
 TOKEN GENERATION FLOW:
     recreate_gateway.py
       └─> provision_token()
-            └─> Copies scripts/bootstrap_token.py to container
+            └─> copies scripts/bootstrap_token.py to container
             └─> Executes: podman exec mcp_gateway python3 bootstrap_token.py
                   └─> bootstrap_token.py (runs inside container):
                         1. Finds admin user in database
@@ -364,11 +364,10 @@ def main():
         print(f"✅ JWT RSA Keys already exist at {jwt_priv}")
 
     # PHASE 5: PODMAN VOLUME
-    print("\n--- Phase 5: Podman Volume ---")
-    if not check_podman_resource("volume", "mcp_gateway_data") or args.force:
-        run_cmd("podman volume create mcp_gateway_data", "Creating Volume 'mcp_gateway_data'", args.dry_run)
-    else:
-        print("✅ Podman volume 'mcp_gateway_data' exists.")
+    print("\n--- Phase 5: Podman Volume (Cleanup and recreation) ---")
+    if check_podman_resource("volume", "mcp_gateway_data"):
+        run_cmd("podman volume rm mcp_gateway_data", "Removing existing volume 'mcp_gateway_data'", args.dry_run)
+    run_cmd("podman volume create mcp_gateway_data", "Creating fresh volume 'mcp_gateway_data'", args.dry_run)
 
 
     # PHASE 6: IMAGE BUILD (Gateway)
@@ -390,9 +389,9 @@ def main():
 
     # PHASE 6.5: NETWORK setup
     print("\n--- Phase 6.5: Network Setup ---")
-    NETWORK_NAME = "mcp_network"
+    NETWORK_NAME = "sanctuary_network"
     if not check_podman_resource("network", NETWORK_NAME):
-        run_cmd(f"podman network create {NETWORK_NAME}", "Creating Network 'mcp_network'", args.dry_run)
+        run_cmd(f"podman network create {NETWORK_NAME}", "Creating Network 'sanctuary_network'", args.dry_run)
     else:
         print(f"✅ Network '{NETWORK_NAME}' exists.")
 
@@ -425,7 +424,7 @@ def main():
     if not args.dry_run:
         # Give it a second to exist
         time.sleep(2)
-        run_cmd(f"podman network connect {NETWORK_NAME} {CONTAINER_NAME}", "Connecting Gateway to 'mcp_network'", args.dry_run)
+        run_cmd(f"podman network connect {NETWORK_NAME} {CONTAINER_NAME}", "Connecting Gateway to 'sanctuary_network'", args.dry_run)
 
     # PHASE 7.1: READINESS CHECK
     if not args.dry_run:

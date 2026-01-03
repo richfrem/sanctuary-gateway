@@ -7,7 +7,7 @@
 # Description: Build & automation helpers for the MCP Gateway project
 # Usage: run `make` or `make help` to view available targets
 #
-# help: 🐍 MCP CONTEXT FORGE  (An enterprise-ready Model Context Protocol Gateway)
+# help: 🐍 MCP CONTEXT FORGE  ( enterprise-ready Model Context Protocol Gateway)
 #
 # ──────────────────────────────────────────────────────────────────────────
 SHELL := /bin/bash
@@ -21,7 +21,7 @@ SHELL := /bin/bash
 ENABLE_RUST_BUILD ?= 0
 
 # Project variables
-PROJECT_NAME      = mcpgateway
+PROJECT_NAME      = mcp_gateway
 DOCS_DIR          = docs
 HANDSDOWN_PARAMS  = -o $(DOCS_DIR)/ -n $(PROJECT_NAME) --name "MCP Gateway" --cleanup
 
