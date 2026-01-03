@@ -363,6 +363,14 @@ def main():
     else:
         print(f"✅ JWT RSA Keys already exist at {jwt_priv}")
 
+    # PHASE 4.5: CONTAINER TEARDOWN
+    print("\n--- Phase 4.5: Container Teardown ---")
+    # Clean up both current and potentially old container names to unlock volumes
+    for container in [CONTAINER_NAME, "mcpgateway", "helloworld_mcp"]:
+        if check_podman_resource("container", container):
+            run_cmd(f"podman stop {container}", f"Stopping {container}", args.dry_run)
+            run_cmd(f"podman rm {container}", f"Removing {container}", args.dry_run)
+
     # PHASE 5: PODMAN VOLUME
     print("\n--- Phase 5: Podman Volume (Cleanup and recreation) ---")
     if check_podman_resource("volume", "mcp_gateway_data"):
@@ -395,14 +403,8 @@ def main():
     else:
         print(f"✅ Network '{NETWORK_NAME}' exists.")
 
-    # PHASE 7: CONTAINER LIFECYCLE
-    print("\n--- Phase 7: Container Lifecycle ---")
-    
-    # Stop existing containers
-    for container in [CONTAINER_NAME, "helloworld_mcp"]:
-        if check_podman_resource("container", container):
-            run_cmd(f"podman stop {container}", f"Stopping {container}", args.dry_run)
-            run_cmd(f"podman rm {container}", f"Removing {container}", args.dry_run)
+    # PHASE 7: CONTAINER DEPLOYMENT
+    print("\n--- Phase 7: Container Deployment ---")
 
     # Run Hello World Server (Background)
     if check_podman_resource("image", "localhost/helloworld_mcp:latest"):
