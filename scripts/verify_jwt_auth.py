@@ -5,19 +5,22 @@ import urllib.error
 import json
 
 def get_token():
-    """Extract specifically MCP_GATEWAY_API_TOKEN from .env"""
+    """Extract specifically MCPGATEWAY_BEARER_TOKEN from .env"""
     token = None
     try:
-        with open('.env', 'r') as f:
-            for line in f:
-                if line.strip().startswith('MCP_GATEWAY_API_TOKEN='):
-                    # Split on first = and strip whitespace/quotes
-                    parts = line.split('=', 1)
-                    if len(parts) == 2:
-                        token = parts[1].strip().strip('\'"')
-                        break
-    except FileNotFoundError:
-        print("Error: .env file not found")
+        if os.path.exists('.env'):
+            with open('.env', 'r') as f:
+                for line in f:
+                    if line.strip().startswith('MCPGATEWAY_BEARER_TOKEN='):
+                        parts = line.split('=', 1)
+                        if len(parts) == 2:
+                            token = parts[1].strip().strip('\'"')
+                            break
+        else:
+            print("Error: .env file not found")
+            return None
+    except Exception as e:
+        print(f"Error reading .env: {e}")
         return None
     return token
 

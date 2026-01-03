@@ -1,0 +1,1141 @@
+# setup Snapshot
+Generated: 2025-12-19T14:47:15.756Z
+
+# Directory Structure (setup)
+  ./CLEAN_INSTALL.md
+  ./MAINTENANCE.md
+  ./PODMAN_SETUP_HISTORY.md
+  ./agent_gateway_guide.md
+  ./learning_for_newChat_Session.md
+  ./recreate_gateway.py
+  ./verify_hello_world.py
+
+--- START OF FILE CLEAN_INSTALL.md ---
+
+# Sanctuary Gateway - Clean Install Instructions
+
+This guide provides the definitive steps to perform a clean installation and verification of the Sanctuary Gateway.
+
+## 1. Prerequisites
+
+Ensure you have the following installed on your system:
+
+*   **Podman**: Required for container runtime.
+    *   *Check*: `podman --version`
+    *   *Note*: Ensure your Podman machine is running (`podman machine start`).
+*   **Python 3**: Required for setup scripts.
+    *   *Check*: `python3 --version`
+*   **Make**: Required for build orchestration.
+    *   *Check*: `make --version`
+
+## 2. Configuration
+
+1.  **Environment File**:
+    Ensure you have an `.env` file in the project root.
+    
+    *   **If you already have an `.env` file**: DO NOT overwrite it. Ensure it contains the required variables below.
+    *   **If starting fresh**: Create a new `.env` file and populate it with the required variables manually or by safely copying specific values from `.env.example`.
+    *Required Variables* (defaults are usually fine for local dev):
+    *   `PORT=4444`
+    *   `CONTAINER_TOOL=podman`
+
+
+## 3. SSL Certificate Trust (One-Time Setup)
+
+**Goal:** Enable encrypted HTTPS traffic and trust the certificate locally.
+
+1.  **Generate Certificates (if not done automatically):**
+    *   *Wrapper Command:* `make certs`
+    *   *Actual Command (OpenSSL):*
+        ```bash
+        openssl req -x509 -newkey rsa:4096 -sha256 -days 365 -nodes \
+            -keyout certs/key.pem -out certs/cert.pem \
+            -subj "/CN=localhost" \
+            -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+        ```
+    *   *Details:* Generates a 4096-bit RSA key and a self-signed certificate valid for localhost (1 year).
+
+2.  **Trust Configuration (macOS):**
+    *   *Observation:* `curl https://localhost:4444` failed with certificate errors.
+    *   *Diagnosis:* Certificate is valid but Self-Signed.
+    *   *Action:* Added certificate to macOS System Keychain.
+    *   *Command:* `sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain certs/cert.pem`
+    *   *Result:* Browser accepts connection as Secure.
+
+## 4. JWT Key Generation (One-Time Setup)
+
+**Goal:** Generate RSA keys for signing API tokens.
+
+1.  **Generate Keys (if not done automatically):**
+    *   *Wrapper Command:* `make certs-jwt`
+    *   *Details:* Generates 4096-bit RSA private and public keys in `certs/jwt/`.
+
+2.  **Configuration Note:**
+    *   The Gateway container requires **absolute paths** for these keys within the container.
+    *   The `recreate_gateway.py` script handles this, but ensure your `.env` (if manually edited) uses:
+        *   `JWT_PUBLIC_KEY_PATH=/app/certs/jwt/public.pem`
+        *   `JWT_PRIVATE_KEY_PATH=/app/certs/jwt/private.pem`
+
+## 5. Execution (The "One-Click" Setup)
+
+We have consolidated the teardown, build, run, and verification into a single script.
+
+**Run the Setup Script:**
+
+```bash
+python3 setup/recreate_gateway.py
+```
+
+### What this script does:
+1.  **Prerequisites Check**: Verifies tools and `.env` exist.
+2.  **Teardown**: Stops and removes any existing `mcpgateway` container.
+3.  **Certificates**: Generates self-signed SSL certs and JWT keys if missing (`make certs`, `make certs-jwt`).
+4.  **Podman Volume**: Ensures the data volume (`mcp_gateway_data`) exists.
+5.  **Build**: Rebuilds the container image (`localhost/mcpgateway/mcpgateway:latest`) using Podman.
+6.  **Launch**: Starts the container with SSL enabled.
+7.  **Readiness**: Waits for the `/health` endpoint to return 200 OK.
+8.  **Provisioning**: Generates a valid API token inside the container and updates your local `.env` file with `MCPGATEWAY_BEARER_TOKEN`.
+9.  **Verification**:
+    *   Runs `scripts/verify_jwt_auth.py` (Simple API connectivity check).
+    *   Runs `tests/mcp_servers/gateway/integration/test_gateway_blackbox.py` (Integration tests).
+
+## 5. Manual Verification
+
+After the script completes successfully, you can verify connectivity manually:
+
+**Check Health (Public):**
+```bash
+curl -k https://localhost:4444/health
+```
+
+**Check Tools (Authenticated):**
+```bash
+# Ensure MCPGATEWAY_BEARER_TOKEN is set in your current shell
+source .env
+curl -k -H "Authorization: Bearer $MCPGATEWAY_BEARER_TOKEN" https://localhost:4444/tools
+```
+
+## Troubleshooting
+
+*   **Docker Daemon Errors**: If you see errors about connecting to the Docker daemon, ensure you are using the provided `recreate_gateway.py` script, which explicitly enforces Podman usage.
+*   **Podman Hangs**: If `podman` commands hang (including inside the script), your Podman VM might be frozen.
+    *   *Fix*: Run `podman machine stop` followed by `podman machine start`.
+
+## Appendix: Technical Reference
+
+### Makefile Configuration (Podman Compatibility)
+The `Makefile` in this repository includes specific flags to support rootless Podman execution, which are critical for the correct operation of the setup scripts:
+
+*   **Target:** `container-run-ssl` (used by `podman-run-ssl`)
+*   **Volume Mounting:** Uses `:Z,U` suffixes for the data volume (`-v mcp_gateway_data:/app/data:Z,U`).
+    *   `:Z`: Relabels the volume for private SELinux context (prevents "Permission Denied" from SELinux).
+    *   `:U`: Recursively changes ownership of the volume to the container's user (UID 1001), resolving filesystem permission issues in rootless mode.
+
+--- END OF FILE CLEAN_INSTALL.md ---
+
+--- START OF FILE MAINTENANCE.md ---
+
+# Repository Maintenance & Sync
+
+This repository is configured as a **Fork** of the upstream IBM Context Forge project.
+
+## Remote Configuration
+
+*   **origin**: `https://github.com/richfrem/sanctuary-gateway` (Your custom fork)
+*   **upstream**: `https://github.com/IBM/mcp-context-forge.git` (Source of truth)
+
+## Syncing with Upstream
+
+To pull the latest changes from the IBM repository:
+
+```bash
+# 1. Fetch updates
+git fetch upstream
+
+# 2. Merge into your local main
+git checkout main
+git merge upstream/main
+
+# 3. Push to your fork
+git push origin main
+```
+
+## Maintenance Workflows
+
+### Moving Scripts
+Utility scripts have been moved to `scripts/` to keep the root directory clean.
+*   `tests/mcp_servers/gateway/integration/test_gateway_blackbox.py`: Integration test suite
+*   `scripts/verify_jwt_auth.py`: Quick JWT verification tool
+
+--- END OF FILE MAINTENANCE.md ---
+
+--- START OF FILE PODMAN_SETUP_HISTORY.md ---
+
+# Sanctuary Gateway Podman Setup History
+**Date:** 2025-12-16
+**Status:** SUCCESS
+
+This document records the **complete chronological history** of the setup, including initial attempts, debugging steps, and the final working configuration.
+
+---
+
+## 🕒 Chronological Execution Log
+
+### Phase 1: Initial Build & Runtime Detection
+**Goal:** Build the container image.
+1.  **Attempt 1:** Ran `make container-build`.
+    *   *Result:* **Failed**. The Makefile tried to contact the Docker Daemon (`docker.sock`), which wasn't running.
+    *   *Diagnosis:* The environment is Podman-only (rootless).
+2.  **Fix:** We explicitly used the Podman-specific targets or allowed the Makefile to detect `podman` by ensuring the runtime variable was set correctly.
+    *   *Command:* `make container-build` (successfully detected Podman eventually).
+
+### Phase 2: Launch & Persistence (The "Crash" & "Permission" Saga)
+**Goal:** Run the container with persistent storage.
+1.  **Attempt 1 (Host Dir Mount):**
+    *   *Config:* `-v $(PWD)/data:/data`
+    *   *Result:* **Crash** (`PermissionError: [Errno 13] Permission denied: '/data'`).
+    *   *Reason:* The container runs as a non-root user (UID 1001), but the host directory was owned by the user (UID 501), and SELinux/permissions blocked the write.
+2.  **Attempt 2 (Tmp Workaround):**
+    *   *Config:* `DATABASE_URL=sqlite:////tmp/mcp.db`
+    *   *Result:* **Success**, but **Ephemeral**. Data would be lost on restart. Rejected by user policy.
+3.  **Attempt 3 (Named Volume + User Host Mapping):**
+    *   *Config:* `podman run --user 501:20 ... -v mcp_gateway_data:/app/data ...`
+    *   *Result:* **Failed**. The container process running as host user (501) could not write to the volume properly, or caused ownership conflicts.
+4.  **Final Fix (Named Volume + `:U` Flag):**
+    *   *Action:* Removed `--user` override (let container run as default 1001).
+    *   *Action:* Added `:U` flag to volume mount.
+    *   *Command:* `podman run ... -v mcp_gateway_data:/app/data:Z,U ...`
+    *   *Result:* **Success**. Podman automatically `chown`ed the volume to UID 1001. Persistence verified.
+
+### Phase 3: SSL Certificate Generation & Trust
+**Goal:** Enable encrypted HTTPS traffic and trust the certificate locally.
+
+1.  **Generate Certificates:**
+    *   *Wrapper Command:* `make certs`
+    *   *Actual Command (OpenSSL):*
+        ```bash
+        openssl req -x509 -newkey rsa:4096 -sha256 -days 365 -nodes \
+            -keyout certs/key.pem -out certs/cert.pem \
+            -subj "/CN=localhost" \
+            -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+        ```
+    *   *Details:* Generates a 4096-bit RSA key and a self-signed certificate valid for localhost (1 year).
+
+2.  **Trust Configuration (macOS):**
+    *   *Observation:* `curl https://localhost:4444` failed with certificate errors.
+    *   *Diagnosis:* Certificate is valid but Self-Signed.
+    *   *Action:* Added certificate to macOS System Keychain.
+    *   *Command:* `sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain certs/cert.pem`
+    *   *Result:* Browser accepts connection as Secure.
+
+---
+
+## 🛠 Final Configuration Reference
+
+### 1. Files Modified
+| File | Action | Details |
+| :--- | :--- | :--- |
+| `.env` | **Created** | Set `DATABASE_URL=sqlite:////app/data/mcp.db`, `MCPGATEWAY_BEARER_TOKEN=<ADMIN_BEARER_TOKEN>` |
+| `.gitignore` | **Restored** | Re-added `.env` (Security restored). |
+| `Makefile` | **Update** | `podman-run-ssl`: Added `:Z,U` flags to volume mount, removed `--user` override. |
+
+### 2. Infrastructure Created
+*   **Volume:** `mcp_gateway_data` (Podman Named Volume)
+*   **Image:** `localhost/mcpgateway/mcpgateway:latest` (ARM64)
+*   **Container:** `sanctuary-gateway`
+
+### 3. Quick Start (Test Commands)
+Use these commands to verify the service is working.
+
+**Check Health:**
+```bash
+curl -v https://localhost:4444/health
+```
+
+### 3. Connection Info
+*   **URL:** `https://localhost:4444/v1`
+*   **Web UI:** `https://localhost:4444/admin`
+    *   **Credentials:** See `PLATFORM_ADMIN_EMAIL` / `PLATFORM_ADMIN_PASSWORD` in your `.env` file.
+*   **Auth:** `Bearer <ADMIN_BEARER_TOKEN>`
+
+**List Servers (Authenticated):**
+```bash
+curl -H "Authorization: Bearer <ADMIN_BEARER_TOKEN>" \
+     https://localhost:4444/v1/servers
+```
+*(Note: Replace `<ADMIN_BEARER_TOKEN>` with the value from your `.env` file)*
+
+### 4. Security Upgrade (Signed JWT)
+Switched from simple bearer token to cryptographically signed JWTs (ADR 058 Refinement).
+
+1.  **Generate Secret:**
+    ```bash
+    openssl rand -hex 32
+    ```
+2.  **Update .env:**
+    *   Removed `MCPGATEWAY_BEARER_TOKEN`.
+    *   Added `JWT_SECRET_KEY=<REDACTED_32_CHAR_HEX>`.
+3.  **Restart Service:**
+    ```bash
+    make podman-run-ssl
+    ```
+
+### 5. Asymmetric JWT & GitHub SSO (2025-12-16)
+Upgraded security to use RS256 signing and enabled GitHub SSO.
+
+1.  **Asymmetric Keys (RS256):**
+    *   Generated 4096-bit RSA keys: `make certs-jwt`.
+    *   **Fix:** Updated `.env` to use absolute container paths for keys:
+        *   `JWT_PUBLIC_KEY_PATH=/app/certs/jwt/public.pem`
+        *   `JWT_PRIVATE_KEY_PATH=/app/certs/jwt/private.pem`
+    *   *Note:* Previous configuration used relative paths which failed inside the container.
+
+2.  **GitHub SSO Configuration:**
+    *   Registered "Sanctuary Gateway (Local)" OAuth App on GitHub.
+    *   Callback URL: `https://localhost:4444/auth/sso/callback/github`.
+    *   Enabled SSO in `.env`:
+        *   `SSO_ENABLED=true`
+        *   `SSO_GITHUB_ENABLED=true`
+    *   Added Client ID/Secret (provided by user).
+    *   **Admin Access:** Configured `SSO_GITHUB_ADMIN_ORGS` to grant admin rights to specific users/orgs.
+
+3.  **Restart Service:**
+    ```bash
+    make podman-run-ssl
+    ```
+
+### 6. Configuration Revert (SSO Disabled)
+*   **Action:** Disabled SSO in `.env` (`#SSO_ENABLED=true`) due to GitHub privacy configuration issues (missing public email).
+*   **Result:** Reverted to Local Admin Authentication (Token/Password).
+
+### 7. Understanding JWT Token Authentication (API Tokens)
+
+**How Applications Authenticate:**
+
+Applications don't use username/password - they use **API Tokens** (which are JWT tokens signed with the RSA keys).
+
+**The Flow:**
+1.  **Admin creates API token** (via Admin UI or API endpoint)
+2.  **Token is signed** with `certs/jwt/private.pem` (RS256 algorithm)
+3.  **Application stores token** (e.g., in `.env` as `MCPGATEWAY_BEARER_TOKEN`)
+4.  **Application sends token** in requests: `Authorization: Bearer <token>`
+5.  **Server verifies token** using `certs/jwt/public.pem`
+
+**Why RSA Keys Matter:**
+*   **Private key** (`private.pem`): Stays on server, signs tokens (creates them)
+*   **Public key** (`public.pem`): Verifies tokens (proves they're legitimate)
+*   Even if someone gets the public key, they **cannot create fake tokens**
+*   Only the server with the private key can create valid tokens
+
+**Testing API Token:**
+```bash
+# Use your API token to list servers
+TOKEN="your-jwt-token-here"
+curl -k -H "Authorization: Bearer $TOKEN" https://localhost:4444/v1/servers
+```
+
+**Key Difference from Basic Auth:**
+*   **Basic Auth**: Username/password for humans (Admin UI login)
+*   **API Tokens**: Long-lived JWT for applications (programmatic access)
+
+### Phase 8: Automation & Repeatability (2025-12-17)
+
+To ensure the environment can be recreated reliably, a master setup script was developed.
+
+*   **Automation:** Created `setup/recreate_gateway.py`.
+    - **Features:**
+        - Dynamically reads `.env` for key paths and configuration.
+        - Phase-by-phase idempotency (SSL, JWT Keys, Volumes, Build, Runtime).
+        - **Phase 7.5: Token Lifecycle:** Automatically clears existing tokens, generates a fresh JWT named "sanctuary gateway api", and synchronizes it with `.env`.
+        - **Phase 8: Automated Verification:** Automatically runs `scripts/verify_jwt_auth.py` and `pytest` blackbox tests after deployment.
+        - Existence checks for every file and Podman resource.
+        - Supports `--dry-run` and `--force`.
+*   **Workflow:** The recommended way to maintain the gateway is now:
+    1. Update `.env`.
+    2. Run `./setup/recreate_gateway.py`.
+*   **Verification:** Integrated `scripts/verify_jwt_auth.sh` for post-setup validation.
+
+### 2025-12-17: Master Setup Automation & Programmatic Token Registration
+- **Goal**: Full idempotency and automated verification of the Gateway environment.
+- **Implemented `setup/recreate_gateway.py`**: 
+    - Loads `.env` and validates prerequisites.
+    - Automates SSL and JWT key generation.
+    - Manages Podman volumes and container lifecycle (stops/removes existing `mcpgateway` container).
+    - **Robust Readiness Check**: Polls `https://localhost:4444/health` until 200 OK.
+    - **In-Container Token Registration**:
+        - Leverages `scripts/bootstrap_token.py` run via `podman exec`.
+        - Uses internal `TokenCatalogService` to officially register "sanctuary gateway api" in the DB.
+        - Automatically updates host's `.env` with the generated JWT.
+    - **End-to-End Verification**: Runs `verify_jwt_auth.py` and `test_gateway_blackbox.py` autonomously.
+- **Outcome**: Successfully recreated the environment and verified all auth flows in a single command.
+
+--- END OF FILE PODMAN_SETUP_HISTORY.md ---
+
+--- START OF FILE agent_gateway_guide.md ---
+
+# Gemini 3 Agent: MCP Gateway Registration & Integration Guide
+
+This guide provides instructions for a Gemini 3 agent (or any Antigravity-based agent) to register and verify MCP servers through the Sanctuary Gateway.
+
+## 1. Gateway Fundamentals
+
+- **URL:** `https://localhost:4444` (External Access)
+- **Internal URL:** `http://mcpgateway:8000` (Container-to-Container)
+- **Authentication:** RS256 JWT Token passed via `Authorization: Bearer <TOKEN>` header.
+- **Port Mapping:** Host `4444` maps to Container `8000`.
+
+## 2. Registering an MCP Server (Federated Gateway)
+
+To make an MCP server's tools visible to the Gateway, you must register it as a "Gateway" entry.
+
+### Automated Registration (Python/Curl)
+```python
+import os
+import requests
+
+token = os.environ.get("MCPGATEWAY_BEARER_TOKEN")
+gateway_url = "https://localhost:4444/gateways"
+
+payload = {
+    "name": "my-mcp-server",
+    "url": "http://my-mcp-container:8000/sse", # Use Internal Container URL
+    "description": "Integrated MCP Service",
+    "auth_type": None, # "None" for internal services without additional auth
+    "visibility": "public"
+}
+
+response = requests.post(
+    gateway_url,
+    json=payload,
+    headers={"Authorization": f"Bearer {token}"},
+    verify=False # Gateway uses self-signed certs in dev
+)
+
+print(response.json())
+```
+
+### Manual Registration (GUI)
+1. **Navigate to:** `https://localhost:4444/admin/#gateways`
+2. **Field Configuration:**
+   - **MCP Server Name:** `hello-world`
+   - **MCP Server URL:** `http://helloworld-mcp:8005/sse`
+   - **Transport Type:** `SSE`
+   - **Authentication Type:** `None`
+   - **Visibility:** `Public`
+3. **Save:** Scroll to the bottom and click the Save/Add button.
+
+## 3. Invoking Tools via Gateway
+
+Once registered, tools are invoked through the Gateway's central `/tools/invoke` endpoint.
+
+### Direct Tool Invocation
+```bash
+curl -k -X POST -H "Authorization: Bearer $MCPGATEWAY_BEARER_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{
+           "tool_name": "say_hello",
+           "arguments": {
+             "name": "GeminiAgent"
+           }
+         }' \
+     https://localhost:4444/tools/invoke
+```
+
+## 4. Key Learnings & Troubleshooting
+
+- **Port Conflicts:** Ensure your MCP server is not on port `8000` (used by Gateway/VectorDB) or `11434` (Ollama). Recommended: `8005`, `8100+`.
+- **Network Attachment:** All containers must be attached to the same Podman network (e.g., `sanctuary-net`).
+- **SSE Handshake:** The Gateway will attempt to connect to the provided URL immediately upon registration. If the server is unreachable or doesn't return a valid MCP SSE handshake (first event `endpoint`), registration will hang or fail.
+- **JWT Verification:** Ensure the `MCPGATEWAY_BEARER_TOKEN` is the full RS256 string, not just an alias.
+
+--- END OF FILE agent_gateway_guide.md ---
+
+--- START OF FILE learning_for_newChat_Session.md ---
+
+# Hello World MCP Registration - Session Handoff
+
+## Objective
+Register and verify the `hello-world` MCP server with the Sanctuary Gateway.
+
+## Current Status: RESOLVED ✅
+The verification scripts have been updated. The original diagnosis (SSE non-compliance) was **incorrect**.
+
+---
+
+## Root Cause Analysis (Corrected)
+
+**Original Hypothesis (Incorrect):** The `helloworld-mcp` server was not SSE-compliant.
+
+**Actual Finding:** The `helloworld-mcp/server.py` already has the correct SSE implementation:
+```python
+@app.get("/sse")
+async def handle_sse(request: Request):
+    async def event_generator():
+        yield {"event": "endpoint", "data": "/messages"}  # ← Correct!
+```
+
+**Real Issue:** Token synchronization between scripts. The `verify_hello_world.py` wasn't properly loading tokens from all sources.
+
+---
+
+## Verified Working Components
+
+| Component | Status | Verification |
+|-----------|--------|--------------|
+| Gateway container | ✅ Healthy | `curl -k https://localhost:4444/health` |
+| HelloWorld container | ✅ Running | `podman ps` |
+| SSE endpoint | ✅ Correct | Returns `event: endpoint data: /messages` |
+| Container network | ✅ Connected | Both on `sanctuary-net` |
+| Container-to-container | ✅ Works | `podman exec mcpgateway curl http://helloworld-mcp:8005/sse` |
+
+---
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `setup/verify_hello_world.py` | Verification script (updated with dual token support) |
+| `setup/recreate_gateway.py` | Gateway + token setup script |
+| `tests/assets/helloworld/server.py` | The Hello World server (SSE-compliant) |
+
+---
+
+## Verification Commands
+
+```bash
+# 1. Recreate gateway with fresh token
+python3 setup/recreate_gateway.py
+
+# 2. Verify hello-world registration
+python3 setup/verify_hello_world.py
+
+# 3. Manual API check (if needed)
+source <(grep MCPGATEWAY_BEARER_TOKEN .env)
+curl -k -s https://localhost:4444/gateways -H "Authorization: Bearer $MCPGATEWAY_BEARER_TOKEN" | jq '.[].name'
+```
+
+---
+
+## Reference Documentation
+
+- `docs/docs/development/mcp-developer-guide-json-rpc.md` - Complete SSE/JSON-RPC guide
+- Gateway uses `mcp.client.sse.sse_client` from the MCP library for connections
+
+--- END OF FILE learning_for_newChat_Session.md ---
+
+--- START OF FILE recreate_gateway.py ---
+
+#!/usr/bin/env python3
+import os
+import subprocess
+import sys
+import shutil
+import argparse
+import re
+import datetime
+import jwt
+import time
+
+# Container name from Makefile
+CONTAINER_NAME = "mcpgateway"
+
+def load_env(file_path=".env"):
+    """Simple parser to read .env file without external dependencies."""
+    env_vars = {}
+    if not os.path.exists(file_path):
+        return env_vars
+    
+    with open(file_path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            # Handle key=value with potential comments
+            match = re.match(r"^\s*([\w.-]+)\s*=\s*(.*)$", line)
+            if match:
+                key = match.group(1)
+                value = match.group(2).split("#")[0].strip()
+                # Remove quotes if present
+                if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+                    value = value[1:-1]
+                env_vars[key] = value
+    return env_vars
+
+def update_env_file(key, value, file_path=".env"):
+    """Updates or adds a key/value pair in the .env file."""
+    if not os.path.exists(file_path):
+        with open(file_path, "w") as f:
+            f.write(f"{key}=\"{value}\"\n")
+        return
+
+    lines = []
+    found = False
+    with open(file_path, "r") as f:
+        lines = f.readlines()
+
+    for i, line in enumerate(lines):
+        if line.strip().startswith(f"{key}="):
+            lines[i] = f"{key}=\"{value}\"\n"
+            found = True
+            break
+    
+    if not found:
+        # If not found, append it before the end of the file if it has content
+        if lines and not lines[-1].endswith("\n"):
+            lines[-1] += "\n"
+        lines.append(f"{key}=\"{value}\"\n")
+
+    with open(file_path, "w") as f:
+        f.writelines(lines)
+
+def provision_token(env, dry_run=False):
+    """Executes the bootstrap script inside the container to register a token in the DB."""
+    bootstrap_file = "scripts/bootstrap_token.py"
+    if not os.path.exists(bootstrap_file):
+        print(f"⚠️  Cannot provision token: {bootstrap_file} not found locally.")
+        return None
+
+    print("🚀 Registering API Token ('sanctuary gateway api') inside container catalog...")
+    
+    if dry_run:
+        print(f"Dry-run: Would cp {bootstrap_file} and exec it inside {CONTAINER_NAME}.")
+        return "DRY_RUN_TOKEN"
+
+    # 1. Clear existing token from host environment
+    os.environ.pop("MCPGATEWAY_BEARER_TOKEN", None)
+    
+    try:
+        # 2. Copy the script to the container
+        run_cmd(f"podman cp {bootstrap_file} {CONTAINER_NAME}:/tmp/bootstrap_token.py", "Copying bootstrap script to container", dry_run)
+        
+        # 3. Execute the script inside the container
+        # Note: We use run_cmd wrapper but capture output manually since we need the token value
+        cmd = f"podman exec {CONTAINER_NAME} python3 /tmp/bootstrap_token.py"
+        print(f"Running: {cmd}")
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            print(f"❌ Error executing bootstrap script:\n{result.stderr}")
+            return None
+            
+        # 4. Extract the token from output
+        import re
+        match = re.search(r"BOOTSTRAP_TOKEN_START:(.*?):BOOTSTRAP_TOKEN_END", result.stdout)
+        if not match:
+            print(f"❌ Failed to extract token from bootstrap output. Output:\n{result.stdout}")
+            return None
+            
+        token = match.group(1)
+        
+        # 5. Update .env file with both standard and bearer alias
+        update_env_file("MCPGATEWAY_BEARER_TOKEN", token)
+        update_env_file("MCPGATEWAY_BEARER_TOKEN", token)
+        
+        # 6. Update current process environment for immediate testing
+        os.environ["MCPGATEWAY_BEARER_TOKEN"] = token
+        os.environ["MCPGATEWAY_BEARER_TOKEN"] = token
+        
+        print("✅ Token registered in database and .env synchronized.")
+        return token
+    except Exception as e:
+        print(f"❌ Error provisioning token: {e}")
+        return None
+
+def register_demo_server(token, dry_run=False):
+    """Registers a 'hello-world' MCP server via the Gateway API."""
+    print("\n--- Phase 7.6: Registering Demo Server ---")
+    
+    # Get variables (should be set by ensure_oauth_vars)
+    client_id = os.environ.get("MCPGATEWAY_CLIENT_ID", "MISSING_ID")
+    client_secret = os.environ.get("MCPGATEWAY_CLIENT_SECRET", "MISSING_SECRET")
+
+    # Hello World Server Payload (Internal Network)
+    payload = f'''{{
+           "name": "hello-world",
+           "url": "http://helloworld-mcp:8005/sse",
+           "description": "Automated Hello World Server (Internal Network)",
+           "auth_type": null,
+           "tags": ["test:automated"]
+         }}'''
+    
+    cmd = f"""curl -s -X POST -H "Authorization: Bearer {token}" \
+     -H "Content-Type: application/json" \
+     -d '{payload}' \
+     https://localhost:4444/gateways"""
+     
+    # Note: Using -k for curl insecure until we trust CA fully in all contexts
+    cmd = cmd.replace("curl -s", "curl -k -s")
+
+    if dry_run:
+        print(f"🏜  [DRY RUN] Would register server: {cmd}")
+        return True
+
+    print(f"🚀 Registering 'hello-world' server...")
+    try:
+        # We don't use run_cmd here because we want to inspect the output JSON specifically
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            print(f"❌ Curl failed: {result.stderr}")
+            return False
+            
+        if "hello-world" in result.stdout:
+            print(f"✅ Server 'hello-world' registered successfully.")
+            return True
+        elif "Conflict" in result.stdout or "already exists" in result.stdout:
+             print(f"⚠️  Server 'hello-world' already exists (Skipping).")
+             return True
+        else:
+            print(f"❌ Unexpected response: {result.stdout}")
+            return False
+    except Exception as e:
+        print(f"❌ Error registering server: {e}")
+        return False
+
+def ensure_oauth_vars(env):
+    """Ensures OAuth variables exist in .env and environment."""
+    client_id = env.get("MCPGATEWAY_CLIENT_ID")
+    client_secret = env.get("MCPGATEWAY_CLIENT_SECRET")
+    
+    updated = False
+    if not client_id:
+        client_id = "test-client-id-123"
+        update_env_file("MCPGATEWAY_CLIENT_ID", client_id)
+        print("✅ Added dummy MCPGATEWAY_CLIENT_ID to .env")
+        updated = True
+        
+    if not client_secret:
+        client_secret = "test-client-secret-456"
+        update_env_file("MCPGATEWAY_CLIENT_SECRET", client_secret)
+        print("✅ Added dummy MCPGATEWAY_CLIENT_SECRET to .env")
+        updated = True
+        
+    # Export to current process
+    os.environ["MCPGATEWAY_CLIENT_ID"] = client_id
+    os.environ["MCPGATEWAY_CLIENT_SECRET"] = client_secret
+    
+    return client_id, client_secret
+
+
+def invoke_demo_tool(token, dry_run=False):
+    """Invokes a tool on the registered demo server via the Gateway to verify end-to-end proxying."""
+    print("\n--- Phase 7.7: Verifying Tool Invocation (via Gateway) ---")
+    
+    payload = r'''{
+           "tool_name": "say_hello",
+           "arguments": {
+             "name": "SanctuaryUser"
+           }
+         }'''
+    
+    cmd_invoke = f"""curl -k -s -X POST -H "Authorization: Bearer {token}" \
+     -H "Content-Type: application/json" \
+     -d '{payload}' \
+     https://localhost:4444/tools/invoke"""
+    
+    if dry_run:
+        print(f"🏜  [DRY RUN] Would invoke tool: {cmd_invoke}")
+        # print("Header: X-Vault-Tokens: " + vault_tokens)
+        return True
+
+    print(f"🚀 Invoking tool 'say_hello' (hello-world) via Gateway...")
+    try:
+        result = subprocess.run(cmd_invoke, shell=True, capture_output=True, text=True)
+        
+        # Check for success and expected content
+        # Gateway returns the tool result wrapped in a response
+        if result.returncode == 0 and "Hello, SanctuaryUser!" in result.stdout:
+             print(f"✅ Tool invocation successful! Gateway returned: {result.stdout}")
+             return True
+        else:
+             print(f"❌ Failed to invoke tool. \n   Output: {result.stdout}\n   Error: {result.stderr}")
+             return False
+    except Exception as e:
+         print(f"❌ Error invoking tool: {e}")
+         return False
+
+def wait_for_ready(url, timeout=30):
+    """Waits for a URL to return a 200 status."""
+    import ssl
+    import urllib.request
+    
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+
+    start_time = time.time()
+    print(f"⏳ Waiting for Gateway at {url} (timeout {timeout}s)...")
+    while time.time() - start_time < timeout:
+        try:
+            with urllib.request.urlopen(url, context=ctx, timeout=2) as response:
+                if response.getcode() == 200:
+                    print("✅ Gateway is ready!")
+                    return True
+        except Exception:
+            # Silence connection errors during polling
+            pass
+        time.sleep(1)
+    
+    print(f"❌ Timeout waiting for Gateway at {url}")
+    return False
+
+def run_cmd(cmd, description, dry_run=False):
+    if dry_run:
+        print(f"🏜  [DRY RUN] {description}: {cmd}")
+        return True
+    print(f"🚀 {description}...")
+    try:
+        result = subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)
+        print(f"✅ {description} complete.")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Error during {description}:")
+        if e.stdout:
+            print("--- STDOUT ---")
+            print(e.stdout)
+        if e.stderr:
+            print("--- STDERR ---")
+            print(e.stderr)
+        return False
+
+def check_podman_resource(resource_type, name):
+    """Checks if a podman resource (image, container, volume) exists."""
+    cmd = f"podman {resource_type} exists {name}"
+    return subprocess.run(cmd, shell=True).returncode == 0
+
+def main():
+    parser = argparse.ArgumentParser(description="Sanctuary Gateway Granular Recreate Loop")
+    parser.add_argument("--dry-run", action="store_true", help="Show commands without executing")
+    parser.add_argument("--force", action="store_true", help="Force all steps regardless of state")
+    args = parser.parse_args()
+
+    print("🛠 Sanctuary Gateway - Granular Setup Loop")
+
+    # PHASE 1: ENVIRONMENT LOADING
+    print("\n--- Phase 1: Environment Loading ---")
+    env = load_env()
+    if not env:
+        print("❌ Error: .env file not found or empty. Please create it first.")
+        sys.exit(1)
+    
+    # Required paths from .env
+    jwt_pub = env.get("JWT_PUBLIC_KEY_PATH", "certs/jwt/public.pem")
+    jwt_priv = env.get("JWT_PRIVATE_KEY_PATH", "certs/jwt/private.pem")
+    db_url = env.get("DATABASE_URL", "sqlite:////app/data/mcp.db")
+    
+    print(f"✅ Loaded .env configuration. (JWT Keys: {jwt_pub}, {jwt_priv})")
+
+    # PHASE 2: PREREQUISITES
+    print("\n--- Phase 2: Tool Check ---")
+    for tool in ["podman", "openssl", "make"]:
+        if not shutil.which(tool):
+            print(f"❌ Required tool '{tool}' not found in PATH.")
+            sys.exit(1)
+    print("✅ Prerequisites met.")
+
+    # PHASE 3: SSL CERTIFICATES
+    print("\n--- Phase 3: SSL Certificates ---")
+    ssl_cert = "certs/cert.pem"
+    ssl_key = "certs/key.pem"
+    if not os.path.exists(ssl_cert) or not os.path.exists(ssl_key) or args.force:
+        os.makedirs("certs", exist_ok=True)
+        run_cmd("make certs", "Generating SSL Certificates", args.dry_run)
+    else:
+        print(f"✅ SSL Certificates already exist at {ssl_cert}")
+
+    # PHASE 4: JWT RSA KEYS
+    print("\n--- Phase 4: JWT RSA Keys ---")
+    if not os.path.exists(jwt_pub) or not os.path.exists(jwt_priv) or args.force:
+        os.makedirs(os.path.dirname(jwt_priv), exist_ok=True)
+        run_cmd("make certs-jwt", "Generating JWT RSA Keys", args.dry_run)
+    else:
+        print(f"✅ JWT RSA Keys already exist at {jwt_priv}")
+
+    # PHASE 5: PODMAN VOLUME
+    print("\n--- Phase 5: Podman Volume ---")
+    if not check_podman_resource("volume", "mcp_gateway_data") or args.force:
+        run_cmd("podman volume create mcp_gateway_data", "Creating Volume 'mcp_gateway_data'", args.dry_run)
+    else:
+        print("✅ Podman volume 'mcp_gateway_data' exists.")
+
+
+    # PHASE 6: IMAGE BUILD (Gateway)
+    print("\n--- Phase 6: Container Images ---")
+    if not check_podman_resource("image", "localhost/mcpgateway/mcpgateway:latest") or args.force:
+        run_cmd("make podman-build", "Building Gateway Image", args.dry_run)
+    else:
+        print("✅ Gateway image exists.")
+
+    # Build Hello World Image
+    helloworld_dir = "tests/assets/helloworld"
+    if not os.path.exists(helloworld_dir):
+        print(f"⚠️  Hello World assets not found at {helloworld_dir}, skipping Hello World build.")
+    else:
+        if not check_podman_resource("image", "localhost/helloworld-mcp:latest") or args.force:
+             run_cmd(f"podman build -t localhost/helloworld-mcp:latest {helloworld_dir}", "Building Hello World Image", args.dry_run)
+        else:
+             print("✅ Hello World image exists.")
+
+    # PHASE 6.5: NETWORK setup
+    print("\n--- Phase 6.5: Network Setup ---")
+    NETWORK_NAME = "sanctuary-net"
+    if not check_podman_resource("network", NETWORK_NAME):
+        run_cmd(f"podman network create {NETWORK_NAME}", "Creating Network 'sanctuary-net'", args.dry_run)
+    else:
+        print(f"✅ Network '{NETWORK_NAME}' exists.")
+
+    # PHASE 7: CONTAINER LIFECYCLE
+    print("\n--- Phase 7: Container Lifecycle ---")
+    
+    # Stop existing containers
+    for container in [CONTAINER_NAME, "helloworld-mcp"]:
+        if check_podman_resource("container", container):
+            run_cmd(f"podman stop {container}", f"Stopping {container}", args.dry_run)
+            run_cmd(f"podman rm {container}", f"Removing {container}", args.dry_run)
+
+    # Run Hello World Server (Background)
+    if check_podman_resource("image", "localhost/helloworld-mcp:latest"):
+        run_cmd(f"podman run -d --name helloworld-mcp --network {NETWORK_NAME} -p 8005:8005 localhost/helloworld-mcp:latest", "Starting Hello World Server", args.dry_run)
+
+    # Run Gateway (attached to network)
+    # Note: make podman-run-ssl might not support custom networks easily without editing Makefile.
+    # We will override the command manually here to ensure network attachment.
+    # Extracting the command logic from Makefile would be ideal, but for now let's try appending the network arg if we execute raw podman run
+    # OR, relies on Makefile accepting EXTRA_ARGS or similar. 
+    # Let's Modify the Makefile call or replicate the run command.
+    # Replicating run command is risky if Makefile changes. 
+    # Best approach: Use podman network connect after start? No, needs to be at start for some things.
+    # Let's assume we can use `podman network connect` immediately after start.
+    
+    run_cmd("make podman-run-ssl", "Launching Gateway Container", args.dry_run)
+    
+    # Attach Gateway to network
+    if not args.dry_run:
+        # Give it a second to exist
+        time.sleep(2)
+        run_cmd(f"podman network connect {NETWORK_NAME} {CONTAINER_NAME}", "Connecting Gateway to 'sanctuary-net'", args.dry_run)
+
+    # PHASE 7.1: READINESS CHECK
+    if not args.dry_run:
+        print("\n--- Phase 7.1: Readiness Check ---")
+        if not wait_for_ready("https://localhost:4444/health"):
+            print("❌ Error: Gateway container did not become ready in time. Aborting.")
+            subprocess.run(f"podman logs {CONTAINER_NAME} | tail -n 20", shell=True)
+            sys.exit(1)
+
+    # PHASE 7.5: TOKEN PROVISIONING
+    token = None
+    if not args.dry_run:
+        print("\n--- Phase 7.5: Token Provisioning ---")
+        token = provision_token(env, args.dry_run)
+        
+        # Ensure OAuth vars are present
+        ensure_oauth_vars(env)
+        
+        if token:
+             # Registers hello-world/github server
+             register_demo_server(token, args.dry_run)
+             # Verifies tools list
+             invoke_demo_tool(token, args.dry_run)
+    
+    # Cleanup demo server
+    if check_podman_resource("container", "helloworld-mcp"):
+          print("\n--- Cleanup ---")
+          # We leave it running for manual inspection as per standard dev workflows, or kill it?
+          # User said "call that with curl at the end to verify". Usually implies leaving it up or tearing down.
+          # Let's leave it up so user can verify manually too.
+          print("ℹ️  'helloworld-mcp' container left running for manual verification.")
+
+    # PHASE 8: AUTOMATED VERIFICATION
+    if not args.dry_run:
+        print("\n--- Phase 8: Automated Verification ---")
+        run_cmd("python3 scripts/verify_jwt_auth.py", "Running JWT Auth Verification (scripts/verify_jwt_auth.py)", args.dry_run)
+        run_cmd("python3 tests/mcp_servers/gateway/integration/test_gateway_blackbox.py", "Running Blackbox API Tests", args.dry_run)
+
+    print("\n✨ Setup sequence complete!")
+    print("🔍 Manual verify: curl -k https://localhost:4444/health")
+
+if __name__ == "__main__":
+    main()
+you
+
+--- END OF FILE recreate_gateway.py ---
+
+--- START OF FILE verify_hello_world.py ---
+
+import os
+import json
+import requests
+import time
+from typing import List, Dict, Any
+
+# Disable insecure request warnings for local testing with self-signed certs
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+class GatewayClient:
+    def __init__(self, base_url: str, token: str):
+        self.base_url = base_url.rstrip("/")
+        self.headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+
+    def post(self, path: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        url = f"{self.base_url}/{path.lstrip('/')}"
+        response = requests.post(url, headers=self.headers, json=data, verify=False)
+        response.raise_for_status()
+        return response.json()
+
+    def get(self, path: str) -> Any:
+        url = f"{self.base_url}/{path.lstrip('/')}"
+        response = requests.get(url, headers=self.headers, verify=False)
+        response.raise_for_status()
+        return response.json()
+
+def load_token_from_env_file():
+    """Load token from .env file, checking both variable names."""
+    token_vars = ["MCPGATEWAY_BEARER_TOKEN", "MCPGATEWAY_BEARER_TOKEN"]
+    try:
+        with open(".env", "r") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                for var in token_vars:
+                    if line.startswith(f"{var}="):
+                        value = line.split("=", 1)[1].strip().strip('"').strip("'")
+                        if value:
+                            print(f"✅ Loaded token from .env ({var})")
+                            return value
+    except FileNotFoundError:
+        print("⚠️  .env file not found.")
+    return None
+
+def main():
+    # Try environment variables first (both names)
+    token = os.environ.get("MCPGATEWAY_BEARER_TOKEN") or os.environ.get("MCPGATEWAY_BEARER_TOKEN")
+    
+    if token:
+        print("✅ Token found in environment variable")
+    else:
+        print("⚠️  Token not in environment. Checking .env file...")
+        token = load_token_from_env_file()
+
+    if not token:
+        print("❌ Error: Could not find authentication token.")
+        print("   Set MCPGATEWAY_BEARER_TOKEN or MCPGATEWAY_BEARER_TOKEN environment variable,")
+        print("   or ensure it exists in the .env file.")
+        print("   Run: python3 setup/recreate_gateway.py to provision a token.")
+        return
+
+    # Use HTTPS and port 4444 as confirmed
+    client = GatewayClient("https://localhost:4444", token)
+
+    try:
+        # Step 1: Register Physical Gateway
+        print("\n--- Step 1: Registering Physical Gateway ---")
+        gateway_payload = {
+            "name": "hello-world-mcp",
+            "url": "http://helloworld-mcp:8005/sse",
+            "description": "Physical connection to Hello World MCP",
+            "auth_type": None,
+            "tags": ["test", "hello-world"]
+        }
+        try:
+            reg_res = client.post("/gateways", gateway_payload)
+            print(f"Gateway registration successful: {reg_res.get('id')}")
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 409: # Conflict - already exists
+                print("Gateway already exists, proceeding...")
+            else:
+                raise
+
+        # Give it a moment to scan tools
+        print("Waiting 3 seconds for gateway to scan tools...")
+        time.sleep(3)
+
+        # Step 2: Get Tool ID for 'say_hello'
+        print("\n--- Step 2: Fetching Tool IDs ---")
+        tools = client.get("/tools")
+        tool_id = None
+        tool_name_found = None
+        for tool in tools:
+            # Check for say_hello tool - Gateway uses hyphens (say-hello not say_hello)
+            name = tool.get("name", "")
+            if "say-hello" in name or "say_hello" in name:
+                tool_id = tool.get("id")
+                tool_name_found = name
+                print(f"Found tool '{name}' with ID: {tool_id}")
+                break
+        
+        if not tool_id:
+            print("Error: Could not find 'say_hello' tool. Available tools:")
+            for t in tools:
+                print(f" - {t.get('name')} (ID: {t.get('id')})")
+            return
+
+        # Step 3: Register Virtual Server (Catalog)
+        print("\n--- Step 3: Registering Virtual Server ---")
+        server_payload = {
+            "name": "hello-world-server",
+            "description": "Virtual Server for Hello World",
+            "associated_tools": [tool_id],
+            "is_active": True
+        }
+        try:
+            server_res = client.post("/servers", server_payload)
+            print(f"Virtual server registration successful: {server_res.get('id')}")
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 400: # Might be because it already exists or schema mismatch
+                print(f"Server registration failed or already exists: {e.response.text}")
+                # We'll try to find it if it exists
+                # For this script we assume we just created it or it failed.
+            else:
+                raise
+
+        # Step 4: Initialize via Protocol Endpoint (Workaround for RPC bug)
+        print("\n--- Step 4: Initializing via Protocol Endpoint ---")
+        init_payload = {
+            "protocol_version": "2025-03-26",
+            "capabilities": {
+                "tools": {},
+                "resources": {},
+                "prompts": {}
+            },
+            "client_info": {
+                "name": "verify-script",
+                "version": "1.0.0"
+            }
+        }
+        init_res = client.post("/protocol/initialize", init_payload)
+        print(f"Initialization response: {json.dumps(init_res, indent=2)}")
+
+        # Step 5: Invoke Tool
+        print("\n--- Step 5: Invoking 'say_hello' tool ---")
+        invoke_payload = {
+            "tool_name": "say_hello",
+            "arguments": {
+                "name": "SanctuaryBot"
+            }
+        }
+        # Note: The invoke endpoint might need the session ID if it was an RPC session,
+        # but the REST /tools/invoke usually just needs the tool name and arguments.
+        # Let's try the standard invoke.
+        invoke_res = client.post("/tools/invoke", invoke_payload)
+        print(f"Invocation Result: {json.dumps(invoke_res, indent=2)}")
+
+        if "Hello, SanctuaryBot!" in str(invoke_res):
+            print("\n✅ SUCCESS: Hello World verification complete!")
+        else:
+            print("\n❌ FAILURE: Unexpected response from tool invocation.")
+
+    except Exception as e:
+        print(f"\n❌ ERROR: {str(e)}")
+        if isinstance(e, requests.exceptions.HTTPError):
+            print(f"Response Body: {e.response.text}")
+
+if __name__ == "__main__":
+    main()
+
+--- END OF FILE verify_hello_world.py ---

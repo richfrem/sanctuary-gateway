@@ -16,7 +16,7 @@ class TestGatewayBlackBox:
         """Lazy load config."""
         return {
             "URL": os.getenv("MCP_GATEWAY_URL", "https://localhost:4444"),
-            "API_TOKEN": os.getenv("MCP_GATEWAY_API_TOKEN", "")
+            "API_TOKEN": os.getenv("MCPGATEWAY_BEARER_TOKEN", "")
         }
 
     def test_pulse_check(self):
@@ -62,7 +62,7 @@ class TestGatewayBlackBox:
         Expectation: 200 OK
         """
         if not self.config['API_TOKEN']:
-            print("Skipping Handshake: MCP_GATEWAY_API_TOKEN not set")
+            print("Skipping Handshake: MCPGATEWAY_BEARER_TOKEN not set")
             return
         
         url = f"{self.config['URL']}/tools"
