@@ -2595,6 +2595,7 @@ container-run-ssl: certs container-check-image
 		-v $(PWD)/certs:/app/certs:ro$(if $(filter podman,$(CONTAINER_RUNTIME)),$(COMMA)Z,) \
 		-v mcp_gateway_data:/app/data$(if $(filter podman,$(CONTAINER_RUNTIME)),$(COMMA)Z$(COMMA)U,) \
 		-p 4444:4444 \
+		--network=sanctuary_network \
 		--restart=always \
 		--memory=$(CONTAINER_MEMORY) --cpus=$(CONTAINER_CPUS) \
 		--health-cmd="curl -k --fail https://localhost:4444/health || exit 1" \
